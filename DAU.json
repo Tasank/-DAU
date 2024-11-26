@@ -1,0 +1,77 @@
+{
+  "DailyActiveUsers": {
+    "select": [
+      {
+        "column": "to_char(entry_at, 'YYYY-MM-DD')",
+        "alias": "ymd"
+      },
+      {
+        "function": "COUNT",
+        "parameters": ["DISTINCT user_id"],
+        "alias": "cnt"
+      }
+    ],
+    "from": "UserEntry",
+    "where": [
+      {
+        "column": "entry_at",
+        "operator": ">=",
+        "value": "2022-01-01"
+      },
+      {
+        "column": "entry_at",
+        "operator": "<",
+        "value": "2023-01-01"
+      }
+    ],
+    "group_by": ["to_char(entry_at, 'YYYY-MM-DD')"]
+  },
+  "SlidingAverages": {
+    "select": [
+      "ymd",
+      "cnt",
+      {
+        "function": "AVG",
+        "parameters": ["cnt"],
+        "over": {
+          "order_by": "ymd",
+          "rows": "BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+        },
+        "alias": "sliding_average"
+      }
+    ],
+    "from": "DailyActiveUsers"
+  },
+  "SlidingMedians": {
+    "select": [
+      "ymd",
+      "cnt",
+      "sliding_average",
+      {
+        "subquery": {
+          "function": "PERCENTILE_CONT",
+          "parameters": [0.5],
+          "within_group": {
+            "order_by": "cnt"
+          }
+        },
+        "from": {
+          "select": ["cnt"],
+          "from": "SlidingAverages",
+          "where": {
+            "column": "ymd",
+            "operator": "<=",
+            "value": "sa.ymd"
+          }
+        },
+        "alias": "sliding_median"
+      }
+    ],
+    "from": "SlidingAverages sa"
+  },
+  "final_select": {
+    "select": ["ymd", "cnt", "sliding_average", "sliding_median"],
+    "from": "SlidingMedians",
+    "order_by": ["ymd"]
+  }
+}
